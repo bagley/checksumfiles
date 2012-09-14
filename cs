@@ -1,14 +1,33 @@
-#!/bin/bash
-#Checksums files (sha1) in a folder, and saves the hashes to .FolderContents.sha1
+#!/usr/bin/perl
+#checksums files (sha1) in a folder, and saves the hashes to .FolderContents.sha1
 
-LAST_EDIT="Feb 22, 2007"
-VERSION=0.1
+# central db (sqlite or mysql) that holds
+
+use strict;
+use warnings;
+
+use File::Next;
+use Digest::SHA1;
+
+my $last_edit="Sep 13, 2012";
+my $version="0.2";
+
+# for future use of SHA (1, 256, 512, etc)
+# my $sha_alg="sha1";
+
+my $sha_file=".FolderContents.sha1";
+
+# do you want to save hashes in UPPERCASE?
+# note that they can be read in any case.
+my $use_uppercase=1;
 
 #debug on(1) or off(0)
-DEBUG=0
+my $debug=0;
 
 ##########################
 #Changelog
+# Sep 13, 2012
+#  Conversion to perl
 # Jan 5, 2008
 #  All sums now in uppercase, and even lower case will work
 # Dec 21, 2007
@@ -67,65 +86,67 @@ DEBUG=0
 #   
 # ISSUE: Backups will be the same. Don't want to be prompted with this.
 #          
-# NOTE ON GREPPING FOR SUM
-#   Sometimes the sum may be duplicated, so grep may return more than one sum
-#   A while or for statement may be needed so we prompt and check each file, not just the first.
-#   May have to output grep to a file and then use readline to read each one separately
-# 
-# 
 
 #args -r (-u --update)|(-c --check) <folder1> [folder2] [ folder3]...
 
-if [ $1 = "--version" ] || [ "$1" = "-v" ] ; then
-  echo ""
-  echo "Version $VERSION"
-  echo "Internally says last edited $LAST_EDIT"
-  echo "While file time stamp says  $(ls -l ~/bin/checksumfiles | cut -f6-8 -d' ')"
-  echo ""
-  exit
-fi
+if ( $#ARGV > -1 and ( $ARGV[0] eq "--version" or $ARGV[0] eq "-v" ) {
+  print "\nVersion $version";
+  print "Internally says last edited $last_edit\n\n";
+#  print "While file time stamp says  $(ls -l ~/bin/checksumfiles | cut -f6-8 -d' ')"\n
+  exit;
+}
 
-give_some_help() {
-    cat << _EOF_
-Checks File Integrity with sha1 checksums
+sub give_some_help {
+    print cat << _EOF_
+checks File Integrity with sha1 checksums
 Arguments: $(basename $0) <options> <folder> 
   Main Options 
-   -c --check             Check sums for all files in folder (priority)
+   -c --check             check sums for all files in folder (priority)
    -u --update            Make new checksums for new files in folder
-   -r --recursive         Check recursively (default is only current folder)
+   -r --recursive         check recursively (default is only current folder)
   Other Options
    --debug                Output debugging info
 _EOF_
-    [ $# -gt 0 ] && echo "Error: $1"
-    clean_up
+    if ( $#ARGV >= 0 ) {
+		print $#ARGV[0]."\n";
+	}
+    clean_up();
 }
 
-bugout() {
-    [ "$DEBUG" = "1" ] && echo "$*"
+sub bugout {
+    print $_."\n" if ($debug);
 }
 
-check_write() {
-  if [ $CHECK -eq 0 ] && [ $UPDATE -eq 1 ] ; then
-    if [ -f "$1" ] ; then
-      if [ -w $(dirname "$1") ] ; then
-        return 1
-      fi
-    else
-      return 1
-    fi
-  fi
-  return 0
+sub output_data {
+	if ( $check == 1 ) {
+		if ( $#not_found > -1 ) {
+			print "\n-------  Could not find these files  -------\n";
+			foreach ( "$NOT_FOUND"
+  echo "--------------------------------------------"
+ fi
+ if [ -f "$BAD_FILES" ] ; then
+  echo "<<<<<<<<<<   THESE FILES HAVE BEEN ***CORRUPTED***   >>>>>>>>>>>>"
+  echo ""
+  cat "$BAD_FILES"
+  echo "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+ else
+  echo "All files are in good condition"
+ fi
+fi
+			
 }
-
-output_data() {
+		
     
 # DONT translate all hash files to unicode CRLF
 #  cant read them in linux
 
+# hashes and arrays
+
+
 # OUTPUT
 echo ""
 #check files
-if [ $CHECK -eq 1 ] ; then 
+if [ $check -eq 1 ] ; then 
  if [ -f "$NOT_FOUND" ] ; then
   echo "-------  Could not find these files  -------"
   cat "$NOT_FOUND"
@@ -142,7 +163,7 @@ if [ $CHECK -eq 1 ] ; then
 fi
 
 #update and clean files
-if [ $UPDATE -eq 1 ] ; then
+if [ $update -eq 1 ] ; then
  if [ -f "$CHANGED_NAME" ] ; then
   echo "-----   The names of these files were changed   -----"
   cat "$CHANGED_NAME"
@@ -174,6 +195,28 @@ get_upper_case() {
     RETURN=$(echo "$1" | sed 's!a!A!g' | sed 's!b!B!g' | sed 's!c!C!g' | sed 's!d!D!g' | sed 's!e!E!g' | sed 's!f!F!g')
 }
 
+sub checksum {
+  local $_f=shift;
+  if ( not -f $_f ) {
+    print "File has disappeared: $_f\n";
+    return undef;
+  }
+  if ( not -w $_f ) {
+    print "Permission denied: $_f\n";
+    return undef;
+  }
+  if ( open(FILE,$_f) ) {
+    binmode(FILE);
+    $sha1->addfile(*FILE) || return undef;
+    close(FILE);
+    return $sha1->hexdigest;
+  }
+  else {
+    print "Error opening file: $_f\n";
+    return undef;
+  }
+}
+
 clean_up() {
     trap "" SIGHUP SIGTERM SIGINT
     output_data
@@ -184,91 +227,74 @@ clean_up() {
 
 #############################################
 
-
-#constants
-SHA1SUM_SAVE_FILE=".FolderContents.sha1"
-if [ -w /dev/shm/ ] ; then
-  TMP_FOLDER=/dev/shm/checksum-$RANDOM$RANDOM$RANDOM$RANDOM
-elif [ -w /tmp ] ; then
-  TMP_FOLDER=/tmp/checksum-$RANDOM$RANDOM$RANDOM$RANDOM
-else
-  echo "No temp folders found"
-  exit
-  #TMP_FOLDER="${HOME}/checksum-$RANDOM$RANDOM$RANDOM$RANDOM"
-fi
-mkdir -m 700 "$TMP_FOLDER"
-
-# check for needed bins
-
 #folders to check
-FOLDER_LIST="${TMP_FOLDER}/folder_list-$RANDOM"
+my @folder_list=();
 
 #check files
-BAD_FILES="${TMP_FOLDER}/bad_files-$RANDOM"
-NOT_FOUND="${TMP_FOLDER}/not_found-$RANDOM"
+my (@bad_files,@not_found);
 
 #update files
-CHANGED_NAME="${TMP_FOLDER}/changed_name-$RANDOM"
-ADDED_FILES="${TMP_FOLDER}/added_files-$RANDOM"
+my (@changed_name,@added_files);
 
 #clean files
-REMOVED="${TMP_FOLDER}/removed-$RANDOM"
-FILES_EXIST="${TMP_FOLDER}/exist-$RANDOM"
-
-ERRORS_FILE="${TMP_FOLDER}/errors-$RANDOM"
-
-#file list
-FILE_LIST="${TMP_FOLDER}/file_list-$RANDOM"
-
+my (@removed,@files_exists,@errors);
 
 #############################################
 
 
-[ $# -lt 1 ] && give_some_help "No Options given"
-UPDATE=0
-CHECK=0
-RECURSIVE=0
-for (( x=$# ; $x \> 0 ; x-=1 )) ; do
-  case $1 in
-    '-r'|'--recursive')
-      RECURSIVE=1 ;;
-            
-    '-u'|'--update') 
-      UPDATE=1 ;;
-      
-    '-c'|'--check')
-      CHECK=1 ;;
-      
-    '--debug')
-      [ "$DEBUG" != "1" ] && DEBUG=1 ;;
-      
-    *) 
-      if [ -d "$1" ] || [ -f "$1" ] ; then
-        echo "$1" >> "$FOLDER_LIST"
-      else  
-        give_some_help "Unknown option or folder $1" 
-      fi
-      ;;
-        
-  esac
-  shift
-done
-
-# output of args (debug)
-bugout "Args: RECURSIVE:$RECURSIVE - UPDATE:$UPDATE CHECK:$CHECK"
-bugout "FOLDERS and FILES:"
-bugout "$(cat "$FOLDER_LIST")"
+give_some_help "No Options given" unless ( $#ARGV > -1 );
+my $update=0;
+my $check=0;
+my $recursive=0;
+foreach (@ARGV) {
+  if ( $_ eq '-r' or $_ eq '--recursive' ) {
+      $recursive=1 ;
+  }
+  elsif ( $_ eq '-u' or $_ eq '--update' ) {
+	  $update=1;
+  }
+  elsif ( $_ eq '-c' or $_ eq '--check' ) {    
+      $check=1 ;
+  }
+  elsif ( $_ eq '-v' or $_ eq '--debug' ) {
+    $debug=1 ;
+  }
+  else {
+	  if ( -d "$_" or -f "$_" ) {
+        push @folder_list, $_;
+      }
+	  else {
+		  give_some_help "Unknown option or folder/file not found: $_";
+	  }
+  }
+}
 
 #was a mode given
-[ $UPDATE -eq 0 -a $CHECK -eq 0 ] && give_some_help "So, should I --update, or --check?"
+if ( $update == 0 and $check == 0 ) {
+	give_some_help "So, should I --update, or --check?";
+}
+
+# output of args (debug)
+bugout "Args: recursive:$recursive - update:$update check:$check"
+bugout "Selected folders and files:"
+foreach (@folder_list) {
+	bugout "$_";
+}
 
 #ORDER OF ACTIONS: check, update, clean
 
 trap "clean_up" SIGHUP SIGTERM SIGINT
 
 # get files
+my $files = File::Next::files( '/tmp' );
+
+while ( defined ( my $file = $files->() ) ) {
+        # do something...
+    }
+
+
 echo "Getting File List..."
-if [ $RECURSIVE -eq 1 ] ; then
+if [ $recursive -eq 1 ] ; then
   cat "$FOLDER_LIST" | while read FOLDER ; do
     bugout "Finding all files under $FOLDER"
     find "$FOLDER" 2> /dev/null >> "$FILE_LIST"
@@ -298,47 +324,59 @@ fi
 #       no
 #         record name to not_found file ($NOT_FOUND)
 
-if [ $CHECK -eq 1 ] ; then
- # get all the stored sha1 files
- cat "$FILE_LIST" | grep "$SHA1SUM_SAVE_FILE"$ | while read SHA1_FILE ; do
-  [ -f "$SHA1_FILE" ] && DIR=$(dirname "$SHA1_FILE") || DIR=0
-  if [ -d "$DIR" ] ; then
-    echo "Entering -- $DIR"
-    # doing one dir at a time, get all the files the dir
-    ls -1 "$DIR" | while read FILE ; do
-      FILE_GREP=$(echo "$FILE" | sed 's!\[!.!g' | sed 's!\]!.!g')
-      if [ -f "${DIR}/${FILE}" ] ; then
-        # check and compare the sha1 sum
-        if [ $(cat "$SHA1_FILE" | grep -c "  ${FILE_GREP}"$) -eq 1 ] ; then
-          SHA1SUM_STORED=$(cat "$SHA1_FILE" | grep "  ${FILE_GREP}"$ | cut -f1 -d' ')
-          get_upper_case "$SHA1SUM_STORED"
-          SHA1SUM_STORED=$RETURN
-          # we do dir/file since file only has the file name
-          echo "Checking >  ${FILE}"
-          SHA1SUM_CHECK=$(sha1sum "${DIR}/${FILE}" | cut -f1 -d' ')
-          get_upper_case "$SHA1SUM_CHECK"
-          SHA1SUM_CHECK=$RETURN
-          if [ "$SHA1SUM_STORED" != "$SHA1SUM_CHECK" ] ; then
-            # there's a problem
-            echo "${FILE} (${DIR}/${FILE})" >> $BAD_FILES
-            echo "Stored:   $SHA1SUM_STORED" >> $BAD_FILES
-            echo "Checked:  $SHA1SUM_CHECK" >> $BAD_FILES
-            echo "" >> $BAD_FILES
-          fi
-        elif [ $(cat "$SHA1_FILE" | grep -c "  ${FILE_GREP}"$) -gt 1 ] ; then
-          # if more than one sum, will need to look at it
-            echo "Multiple instances[$(cat "$SHA1_FILE" | grep -c "  ${FILE}"$)]: ${FILE_NAME}" >> "$ERRORS_FILE"
-            echo "  In $SHA1_FILE" >> "$ERRORS_FILE"
-            echo "" >> "$ERRORS_FILE"
-        else
-          # hash of file is not recorded
-          echo "${DIR}/${FILE}" >> "$NOT_FOUND"
-        fi
-      fi
-    done
-  fi
- done
-#if - update continues
+
+# get files
+
+# check file hashes, by only looking at sha1sum_save_files 
+if ( $check == 1 ) {
+	my $dirs = File::Next::dirs( {
+	sort_file => 1,
+	}, @folder_list );
+
+	while ( defined ( my $dir = $dirs->() ) ) {
+    	next if ( -d $dir ;
+    	
+		my $sha_file="$dir/$sha1sum_save_file";
+		# is it there, does it have data, and can we read it?
+		if ( not -f $sha_file or not -s $sha_file or not -r  $sha_file) {
+			next;
+		}
+		
+		if ( not open (CHKFILE, $sha_file) ) {
+			print "Failed to open hash file $sha_file\n";
+			#add to error notices
+			next;
+		}
+		# read in line by line, and check
+		@hashes = <CHKFILE>;
+		chomp @hashes;
+		foreach (my $line (sort @hashes)) {
+			next if $line =~ /^\s*$/;
+			# format is "HASH  /file", so just split by first space?
+			my ($hash, $file);
+			$line =~ s/^(\w+)\s+([^\s].+)$/$hash=$1,$file=$2/i;
+			my $return=checksum("$dir/$file");
+			if (not defined $return ) {
+				#add to errors
+				# was it not there, or could not read, or what?
+				print "Failed to checksum $file\n";
+				next;
+			}
+			if ( $return ne $hash ) {
+				#add to corrupt files
+            	# echo "${FILE} (${DIR}/${FILE})" >> $BAD_FILES
+            	# echo "Stored:   $SHA1SUM_STORED" >> $BAD_FILES
+            	# echo "checked:  $SHA1SUM_check" >> $BAD_FILES
+				# print "File has changed: $file\n";
+				next;
+			}
+			# otherwise, next one
+		}
+	}
+}
+			
+				
+
 
 ################################
 
@@ -364,11 +402,11 @@ if [ $CHECK -eq 1 ] ; then
 #          no
 #            remove and save file name to removed file ($REMOVED)
 
-elif  [ $UPDATE -eq 1 ] ; then
+elif  [ $update -eq 1 ] ; then
   # add new files and fix renamed ones
   bugout "Updating"
   cat "$FILE_LIST" | while read FILE ; do
-    if [ -d "$FILE" ] && [ $RECURSIVE -eq 1 ] ; then
+    if [ -d "$FILE" ] && [ $recursive -eq 1 ] ; then
       echo "Entering -- $FILE"
     elif [ -f "$FILE" ] && [ "$(basename "$FILE")" != "${SHA1SUM_SAVE_FILE}" ] ; then
       FILE_NAME=$(basename "$FILE")

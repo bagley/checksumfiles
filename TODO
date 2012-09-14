@@ -1,0 +1,30 @@
+central db (sqlite or mysql) that holds all files info,
+inode, size, mod date, and other stat info,
+so on renames or moves the file does not have to be rehashed
+
+local .FolderContents.sha1 file for transfering out of the system
+Top part is XXXXXXXXXXX  File.txt
+Bottom is null? delimited list of all file info, except inode
+mod date, checksum, size, name
+size<>checksum<>mod-date<>file
+
+Checking and Updating checksum info:
+data1 ... Ok
+data2 ... Renamed
+data3 ... Warning! File has been changed or corrupted
+data4 ... No such file
+data5 ... Checksum missing ... Generating ... Done
+data5 ... Checksum missing ... Skipping
+
+data1 ... Generating ... Done
+data2 ... Access Denied
+data3 ... Already Done
+
+-------------------------------------------------
+Future:
+
+--show-duplicates --sd
+
+inotify? inotify -> on access, checksum file
+
+
