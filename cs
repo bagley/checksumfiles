@@ -9,6 +9,7 @@ use warnings;
 use File::Next;
 use Digest::SHA1;
 use File::Basename;
+use Cwd 'abs_path';
 
 my $last_edit="November 2013";
 my $version="0.3";
@@ -18,14 +19,14 @@ my $version="0.3";
 
 my $sha_file = ".FolderContents.sha1";
 
-my $ignore_file_pattern='/Thumbs\.db$|/desktop\.ini$|/\.git/';
+my $ignore_file_pattern='/Thumbs\.db$|/[D|d]esktop\.ini$|/\.git$|/\.git/';
 
 # do you want to save hashes in UPPERCASE?
 # note that they can be read in any case.
 my $use_uppercase=1;
 
 #debug on(1) or off(0)
-my $debug=0;
+my $debug=1;
 
 #############################################
 
@@ -111,14 +112,16 @@ if ( $#ARGV > -1 and ( $ARGV[0] eq "--version" or $ARGV[0] eq "-v" ) ) {
 }
 
 sub give_some_help {
+    my $_name = basename($0);
+    
     print "checks File Integrity with sha1 checksums
-Arguments: $(basename $0) <options> <folder> 
+Arguments: $_name <options> <folder> 
   Main Options 
    -c --check             check sums for all files in folder (priority)
    -u --update            Make new checksums for new files in folder
    -r --recursive         check recursively (default is only current folder)
   Other Options
-   --debug                Output debugging info";
+   --debug                Output debugging info\n\n";
 
     if ( $#ARGV >= 0 ) {
 		print $ARGV[0]."\n";
@@ -126,15 +129,16 @@ Arguments: $(basename $0) <options> <folder>
     clean_up();
 }
 
-sub bugout {
-    print $_."\n" if ($debug);
+sub debug {
+    print shift."\n" if ($debug);
 }
 
 
 
 sub print_errors {
-	print $_;
-	push @errors, $_;
+	my $_msg=shift;
+	print $_msg;
+	push @errors, $_msg;
 }
 
 
@@ -187,17 +191,31 @@ sub format_hash_line {
 #   1 -> file has checksum
 sub has_checksum {
 	my ($_filename,$_shafile)=@_;
+	print "Has_checksum: " . $_filename . " " .$_shafile ."\n";
+	return 0 if ( not -f $_shafile );
 	# lock file
-	my $_return=0;
+	
 	if ( not open(SHA,$_shafile) ) {
 		print_errors("Failed to open $_shafile\n");
 		return 0;
 	}
-	my @num=grep(/[0-9a-f]i+\s$_filename/, <SHA>);
-	if ($#num > -1) {
-		$_return=1;
+	my @_list = <SHA>;
+	chomp @_list;
+	close SHA;
+	foreach (@_list) {
+		print $_;
 	}
-	close(SHA);
+	
+	foreach ( @_list ) {
+		print $_."\n";
+		if ( (split(/  /,$_,1))[1] eq $_filename ) {
+			debug("Already in checksum file: $_filename");
+			return 1;
+		}
+	}
+	exit;
+	debug("Not in checksum file: $_filename");
+	return 0;
 }
 
 
@@ -211,29 +229,35 @@ sub add_checksum {
 	my $_return=0;
 	# lockfile
 	
-	# open file and get contents
-	if ( not open(SHA,$_shafile) ) {
-		print_errors("Failed to open $_shafile\n");
-		return 1;
-	}
-	my @files=<SHA>;
-	chomp @files;
-	close SHA;
-	
-	# is the file already in the mix? ie has a different name?
-	my @hash_present=grep(/$_hash+\s.+/, @files);
-	my @new_list;
-	if ( $#hash_present > -1 ) {
-		@new_list=grep(!/$_hash+\s.+/, @files);
-		@files=@new_list;
-		print "$_file was renamed to $hash_present[0]\n";
+	# do we need to add to the current file
+	my @files=();
+	if ( -f $_shafile ) {
+		# open file and get contents
+		if ( not open(SHA,$_shafile) ) {
+			print_errors("Failed to open $_shafile\n");
+			return 1;
+		}
+		@files=<SHA>;
+		chomp @files;
+		close SHA;
+		
+		# is the file already in the mix? ie has a different name?
+		my @hash_present=grep(!/^$_hash.+/i, @files);
+		if ( $#hash_present != $#files ) {
+			print "$_file was renamed\n";
+			push @changed_name, "$_file was renamed\n";
+		}
 	}
 	
 	# add new file into mix
 	push @files, uc($_hash)."  $_file";
+	debug("Adding checksum " . uc($_hash) . " for $_file");
 	
 	# sort
-	@files=sort_hash_lines(@files);
+	# foreach (@files) { print $_ . "\n"; }
+	my @copy_files=sort_hash_lines(@files);
+	@files=@copy_files;
+	# foreach (@files) { print "sort: ".$_ . "\n"; }
 	
 	# save
 	if ( not open(SHA,'>',$_shafile) ) {
@@ -241,7 +265,8 @@ sub add_checksum {
 		return 1;
 	}
 	for (@files) {
-		print $_ . "\n";
+		# debug("Adding checksum $_");
+		print SHA $_ . "\n";
 	}
 	close SHA;
 	system("sync");
@@ -311,6 +336,9 @@ sub clean_checksums {
 	
 	# only rewrite if needed
 	if ( $_rewrite_file == 1 ) {
+		# remove duplicates
+		
+		
 		# sort
 		@files_exist=sort_hash_lines(@files_exist);
 		
@@ -330,7 +358,7 @@ sub clean_checksums {
 }
 
 sub sort_hash_lines {
-	my @_list;
+	my @_list=@_;
 	return map { $_->[0] }
 		sort { lc($a->[1]) cmp lc($b->[1]) 
 		} map { [$_, /[0-9,a-f]+\s+(.+)/, $_] } @_list;
@@ -381,10 +409,10 @@ if ( $update == 0 and $check == 0 ) {
 }
 
 # output of args (debug)
-bugout "Args: recursive:$recursive - update:$update check:$check";
-bugout "Selected folders and files:";
+debug "Args: recursive:$recursive - update:$update check:$check";
+debug "Selected folders and files:";
 foreach (@folder_list) {
-	bugout "$_";
+	debug "$_";
 }
 
 #ORDER OF ACTIONS: check, update, clean
@@ -412,12 +440,14 @@ $SIG{HUP} =  "clean_up";
 if ( $check == 1 ) {
 	
 	my $sha_file_paths = File::Next::files( { 
-		sort_file => 1, 
-		follow_symlinks => 0,
-		file_filter => sub { /$sha_file$/ }
+		sort_files => 1, 
+		follow_symlinks => 0
 		}, @folder_list );
 	
 	while ( defined ( my $sha_file_path = $sha_file_paths->() ) ) {
+    	
+    	# get full path
+    	$sha_file_path = abs_path(abs_path);
     	
 		# is it there, does it have data, and can we read it?
 		if ( not -s $sha_file_path ) {
@@ -534,17 +564,25 @@ if ( $check == 1 ) {
 
 elsif  ( $update == 1 ) {
 	# add new files and fix renamed ones
-	bugout "Updating";
+	debug "Updating";
 	
 	my $list = File::Next::everything( { 
-		sort_file => 1,
-		follow_symlinks => 0,
-		file_filter => sub { !/$ignore_file_pattern/ }
+		sort_files => 1,
+		follow_symlinks => 0
 		}, @folder_list );
 	
 	my $skip_dir=0;
 	
 	while ( defined ( my $fullpath = $list->() ) ) {
+		
+		if ( $fullpath =~ m/$ignore_file_pattern/ or
+		     $fullpath =~ m|.*/$sha_file$| ) {
+			# print "skipping $fullpath\n";
+			next;
+		}
+		
+		# get full path
+		$fullpath = abs_path($fullpath);
 		
 		if ( -d $fullpath and $recursive eq 1 ) {
 			
@@ -553,7 +591,7 @@ elsif  ( $update == 1 ) {
 			
 		}
 		
-		elsif ( -f $fullpath and $fullpath =~ m|.*/$sha_file$| ) {
+		elsif ( -f $fullpath and $skip_dir == 0 ) {
 			
 			my $file_name=basename($fullpath);
 			
@@ -561,12 +599,22 @@ elsif  ( $update == 1 ) {
 			
 			my $current_sha_file=$dir_name . "/" . $sha_file;
 			
+			# is sha_file writeable?
+			if ( ( -f $current_sha_file and not -w $current_sha_file ) 
+			  or ( not -f $current_sha_file and not -w $dir_name ) ) {
+				if ( $skip_dir == 0 ) {
+					print_errors("Cannot write to sha file: $current_sha_file\n");
+					$skip_dir=1;
+				}
+				next;
+			}
+			
 			# if no checksum file, get checksum
-			if ( not -f $current_sha_file or has_checksum($fullpath, $current_sha_file) == 0 ) {
+			if ( has_checksum($file_name, $current_sha_file) == 0 ) {
 				print "Generating sum for $file_name\n";
 				my $hash=checksum($fullpath);
 				# add to sha_file
-				if ( not add_checksum($file_name,$hash,$current_sha_file) ) {
+				if ( add_checksum($file_name,$hash,$current_sha_file) == 1 ) {
 					print_errors("Failed add hash $hash for $file_name in $current_sha_file\n");
 				}
 				else {
@@ -574,22 +622,11 @@ elsif  ( $update == 1 ) {
 					push @added_files, $fullpath;
 				}
 				next;
+				
 			}
-			
-			# is sha_file writeable?
-			if ( not -w $current_sha_file ) {
-				if ( $skip_dir == 0 ) {
-					print_errors("Cannot write to sha1 file: $current_sha_file\n");
-					$skip_dir=1;
-				}
-				next;
-			}
-			
-			# skip if already has checksum
-			next if ( has_checksum($file_name,$current_sha_file) == 1 );
 			
 			# should never get here
-			print_errors("Error: missed file $fullpath\n");
+			#print_errors("Error: missed file $fullpath\n");
 			
 		}
 		
@@ -600,16 +637,22 @@ elsif  ( $update == 1 ) {
 	# on which ones I modified, however, if a user stops an update
 	# half way through and begins again, the skipped ones would not
 	# be cleaned until a file was modified in their directories
-	
+	exit;
 	print "Cleaning up. This may take some time.\n";
-	my $sha_list = File::Next::from_file( { 
-		sort_file => 1,
-		follow_symlinks => 0,
-		file_filter => sub { !/$ignore_file_pattern/ }
-		}, $sha_file );
+	my $sha_list = File::Next::files( { 
+		sort_files => 1,
+		follow_symlinks => 0
+		}, @folder_list );
 	while ( defined ( my $sha_fullpath = $sha_list->() ) ) {
 		
-		clean_checksums($sha_fullpath);	
+		# only sha1 sum
+		next if ( $sha_fullpath =~ !/\/$sha_file$/ );
+		
+		# get full path
+		$sha_fullpath = abs_path($sha_fullpath);
+		
+		#clean_checksums($sha_fullpath);	
+		print $sha_fullpath
 		
 	}
 	
