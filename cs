@@ -171,13 +171,14 @@ sub checksum {
 # given a hash line, it returns: (hash,file)
 sub format_hash_line {
 	
-	my $_line=@_;
-	chomp $_line;
-	my ($_f,$_h);
+	my $__line=shift;
+	chomp $__line;
+	my ($__f,$__h);
 	
-	$_line =~ s/^([0-9,a-f]+)\s+([^\s].+)$/$_h=$1,$_f=$2/i;
-	
-	return ($_h,$_f);
+	$__line =~ s/^([0-9a-fA-F]+)\s{1-2}(.+)$/$__h=$1,$__f=$2/gi;
+	print $__line . "\n";
+	print $__f . $__h . "\n";
+	return ($__f,$__h);
 	
 }
 
@@ -208,7 +209,9 @@ sub has_checksum {
 	
 	foreach ( @_list ) {
 		print $_."\n";
-		if ( (split(/  /,$_,1))[1] eq $_filename ) {
+		my ($_f,) = format_hash_line($_);
+		print $_f."\n";
+		if ( $_f eq $_filename ) {
 			debug("Already in checksum file: $_filename");
 			return 1;
 		}
@@ -277,8 +280,8 @@ sub add_checksum {
 
 # given a sha file, cleans out non-existant files
 sub clean_checksums {
-	my ($_shafile) = @_;
-	my $_dir=dirname($_shafile);
+	my $__shafile = shift;
+	my $_dir=dirname($__shafile);
 	
 	# if file is empty, remove it and return
 	# prob not going to be used much. is checked below
@@ -291,8 +294,8 @@ sub clean_checksums {
 	
 	
 	# open file and get contents
-	if ( not open(SHA,$_shafile) ) {
-		print_errors("Failed to open $_shafile: $!\n");
+	if ( not open(SHA,$__shafile) ) {
+		print_errors("Failed to open $__shafile: $!\n");
 		return 1;
 	}
 	my @files=();
@@ -311,7 +314,7 @@ sub clean_checksums {
 	my @file_list = grep { !/^\./ && -f "$_dir/$_" } readdir(DIR);
 	# if directory is empty, remove and return
 	if ( $#file_list < -1 ) {
-		unlink $_shafile || print_errors("Unable to remove $_shafile");
+		unlink $__shafile || print_errors("Unable to remove $__shafile");
 		close DIR;
 		return 0;
 	}
@@ -330,7 +333,7 @@ sub clean_checksums {
 	
 	# if list is empty, remove it and return
 	if ( $#files_exist == -1 ) {
-		unlink $_shafile || print_errors("Unable to remove $_shafile");
+		unlink $__shafile || print_errors("Unable to remove $__shafile");
 		return 0;
 	}
 	
@@ -343,8 +346,8 @@ sub clean_checksums {
 		@files_exist=sort_hash_lines(@files_exist);
 		
 		# write
-		if (not open(SHA,'>',$_shafile)) {
-			print_errors("Failed to open $_shafile: $!\n");
+		if (not open(SHA,'>',$__shafile)) {
+			print_errors("Failed to open $__shafile: $!\n");
 			return 1;
 		}
 		foreach (@files_exist) {
