@@ -169,15 +169,15 @@ sub checksum {
 }
 
 # given a hash line, it returns: (hash,file)
-sub format_hash_line {
+sub get_file_hash_from_line {
 	
-	my $_line=@_;
-	chomp $_line;
-	my ($_f,$_h);
+	my $__line=shift;
+	chomp $__line;
+	my ($__f,$__h);
 	
-	$_line =~ s/^([0-9,a-f]+)\s+([^\s].+)$/$_h=$1,$_f=$2/i;
+	$__line =~ s/^([0-9a-fA-F]+)\s+([^\s].+)$/$__h=$1,$__f=$2/i;
 	
-	return ($_h,$_f);
+	return ($__h,$__f);
 	
 }
 
@@ -185,14 +185,19 @@ sub format_hash_line {
 
 
 
-# given (file name, current_sha_file) looks in sha file for file
+# given (hash reference, current_sha_file) returns has of the file
 # and returns
-#   0 -> does not have checksum
-#   1 -> file has checksum
-sub has_checksum {
-	my ($_filename,$_shafile)=@_;
-	print "Has_checksum: " . $_filename . " " .$_shafile ."\n";
-	return 0 if ( not -f $_shafile );
+#   1 -> no checksum file or is empty
+#   0 -> loaded checksums from file
+sub get_saved_checksums {
+	my ($_hash_ref,$_shafile)=@_;
+	
+	return 1 if ( not -f $_shafile or not -s $_sha_file );
+	
+	# my %_hashes=get_hashes($_shafile);
+	
+	#  if ( exists( %_hashes{$_filename}{'hash'} {
+	
 	# lock file
 	
 	if ( not open(SHA,$_shafile) ) {
@@ -202,14 +207,13 @@ sub has_checksum {
 	my @_list = <SHA>;
 	chomp @_list;
 	close SHA;
-	foreach (@_list) {
-		print $_;
-	}
 	
-	foreach ( @_list ) {
-		print $_."\n";
-		if ( (split(/  /,$_,1))[1] eq $_filename ) {
-			debug("Already in checksum file: $_filename");
+	foreach my $_l ( @_list ) {
+		print $_l."\n";
+		my ($_h,$_f) = get_file_hash_from_line($_l);
+		print $_f . "\n"
+		if ( $_f eq $_filename ) {
+			debug("In checksum file: $_filename");
 			return 1;
 		}
 	}
@@ -277,7 +281,7 @@ sub add_checksum {
 
 # given a sha file, cleans out non-existant files
 sub clean_checksums {
-	my ($_shafile) = @_;
+	my $_shafile = shift;
 	my $_dir=dirname($_shafile);
 	
 	# if file is empty, remove it and return
@@ -573,6 +577,10 @@ elsif  ( $update == 1 ) {
 	
 	my $skip_dir=0;
 	
+	my %hashes=();
+	my $hash_sha_path;
+	# to check hash matches sha file
+	
 	while ( defined ( my $fullpath = $list->() ) ) {
 		
 		if ( $fullpath =~ m/$ignore_file_pattern/ or
@@ -610,17 +618,25 @@ elsif  ( $update == 1 ) {
 			}
 			
 			# if no checksum file, get checksum
-			if ( has_checksum($file_name, $current_sha_file) == 0 ) {
+			my $ret=0;
+			if ( $hash_sha_path ne $current_sha_file) {
+				# reload hashes
+				$ret = get_saved_checksums(\%hashes, $current_sha_file);
+				$hash_sha_path=$current_sha_file;
+			}
+			if ( $ret == 1 or not exists(%hashes{$file_name}{'hash'}) ) {
 				print "Generating sum for $file_name\n";
 				my $hash=checksum($fullpath);
-				# add to sha_file
-				if ( add_checksum($file_name,$hash,$current_sha_file) == 1 ) {
+				# add to sha_file with modification date (TODO)
+				%hashes{$file_name}{'hash'}=$hash;
+				if ( save_checksums(\%hashes, $current_sha_file) == 1 ) {
 					print_errors("Failed add hash $hash for $file_name in $current_sha_file\n");
 				}
 				else {
 					# add to new files list
 					push @added_files, $fullpath;
 				}
+				# reload hash?
 				next;
 				
 			}
