@@ -171,7 +171,7 @@ fi
 }
 
 get_upper_case() {
-    RETURN=$(echo "$1" | sed 's!a!A!g' | sed 's!b!B!g' | sed 's!c!C!g' | sed 's!d!D!g' | sed 's!e!E!g' | sed 's!f!F!g')
+    RETURN=$(echo "$1" | sed 's!a!A!g; s!b!B!g; s!c!C!g; s!d!D!g; s!e!E!g; s!f!F!g')
 }
 
 clean_up() {
@@ -308,7 +308,7 @@ if [ $CHECK -eq 1 ] ; then
     echo "Entering -- $DIR"
     # doing one dir at a time, get all the files the dir
     ls -1 "$DIR" | while read FILE ; do
-      FILE_GREP=$(echo "$FILE" | sed 's!\[!.!g' | sed 's!\]!.!g')
+      FILE_GREP=$(echo "$FILE" | sed 's!\[!\\\[!g; s!\]!\\\]!g; s!\.!\\\.!g')
       if [ -f "${DIR}/${FILE}" ] ; then
         # check and compare the sha1 sum
         if [ $(cat "$SHA1_FILE" | grep -c "  ${FILE_GREP}"$) -eq 1 ] ; then
@@ -374,7 +374,7 @@ elif  [ $UPDATE -eq 1 ] ; then
       echo "Entering -- $FILE"
     elif [ -f "$FILE" ] && [ "$(basename "$FILE")" != "${SHA1SUM_SAVE_FILE}" ] ; then
       FILE_NAME=$(basename "$FILE")
-      FILE_NAME_GREP=$(echo "$FILE_NAME" | sed 's!\[!.!g' | sed 's!\]!.!g') 
+      FILE_NAME_GREP=$(echo "$FILE_NAME" | sed 's!\[!\\\[!g; s!\]!\\\]!g; s!\.!\\\.!g') 
       DIR=$(dirname "$FILE")
       DIR1=$(basename "$(dirname "$(dirname "$DIR")")")
       DIR2=$(basename "$(dirname "$DIR")")
@@ -408,8 +408,9 @@ elif  [ $UPDATE -eq 1 ] ; then
               FOUND_NEW_FILE=0
               grep ^"$FILE_SUM" "$SHA1_FILE" | while read LINE ; do
                 FILE_NAME_READ="$(echo "$LINE" | cut -f3- -d' ')"
-                FILE_NAME_READ_GREP=$(echo "$FILE_NAME_READ" | sed 's!\[!.!g' | sed 's!\]!.!g') 
-                #echo "$FILE_NAME_READ"
+                FILE_NAME_READ_GREP=$(echo "$FILE_NAME_READ" | \
+		  sed 's!\[!\\\[!g; s!\]!\\\]!g; s!\.!\\\.!g') 
+		#echo "$FILE_NAME_READ"
                 if ! [ -f "${DIR}/${FILE_NAME_READ}" ] ; then
                   #echo "NOT FOUND ${DIR}/${FILE_NAME_READ}"
                   if [ $FOUND_NEW_FILE -eq 0 ] ; then
