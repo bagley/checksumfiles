@@ -2,6 +2,7 @@
 #Checksums files (sha1) in a folder, and saves the hashes to .FolderContents.sha1
 
 LAST_EDIT="Feb 22, 2007"
+# minor updates 2013
 VERSION=0.1
 
 #debug on(1) or off(0)
@@ -275,7 +276,7 @@ if [ $RECURSIVE -eq 1 ] ; then
     bugout "Finding all files under $FOLDER"
     find "$FOLDER" 2> /dev/null >> "$FILE_LIST"
   done
-  cat "$FILE_LIST" | grep -v ^"find:" | sort -f  > "${FILE_LIST}2"
+  grep -v ^"find:" "$FILE_LIST" | sort -f  > "${FILE_LIST}2"
   mv -f "${FILE_LIST}2" "${FILE_LIST}"
 else
   cat $FOLDER_LIST | while read FOLDER ; do
@@ -302,7 +303,7 @@ fi
 
 if [ $CHECK -eq 1 ] ; then
  # get all the stored sha1 files
- cat "$FILE_LIST" | grep "$SHA1SUM_SAVE_FILE"$ | while read SHA1_FILE ; do
+ grep "$SHA1SUM_SAVE_FILE"$ "$FILE_LIST" | while read SHA1_FILE ; do
   [ -f "$SHA1_FILE" ] && DIR=$(dirname "$SHA1_FILE") || DIR=0
   if [ -d "$DIR" ] ; then
     echo "Entering -- $DIR"
@@ -311,8 +312,8 @@ if [ $CHECK -eq 1 ] ; then
       FILE_GREP=$(echo "$FILE" | sed 's!\[!\\\[!g; s!\]!\\\]!g; s!\.!\\\.!g')
       if [ -f "${DIR}/${FILE}" ] ; then
         # check and compare the sha1 sum
-        if [ $(cat "$SHA1_FILE" | grep -c "  ${FILE_GREP}"$) -eq 1 ] ; then
-          SHA1SUM_STORED=$(cat "$SHA1_FILE" | grep "  ${FILE_GREP}"$ | cut -f1 -d' ')
+        if [ $(grep -c "  ${FILE_GREP}"$ "$SHA1_FILE") -eq 1 ] ; then
+          SHA1SUM_STORED=$(grep "  ${FILE_GREP}"$ "$SHA1_FILE" | cut -f1 -d' ')
           get_upper_case "$SHA1SUM_STORED"
           SHA1SUM_STORED=$RETURN
           # we do dir/file since file only has the file name
@@ -327,9 +328,9 @@ if [ $CHECK -eq 1 ] ; then
             echo "Checked:  $SHA1SUM_CHECK" >> $BAD_FILES
             echo "" >> $BAD_FILES
           fi
-        elif [ $(cat "$SHA1_FILE" | grep -c "  ${FILE_GREP}"$) -gt 1 ] ; then
+        elif [ $(grep -c "  ${FILE_GREP}"$ "$SHA1_FILE") -gt 1 ] ; then
           # if more than one sum, will need to look at it
-            echo "Multiple instances[$(cat "$SHA1_FILE" | grep -c "  ${FILE}"$)]: ${FILE_NAME}" >> "$ERRORS_FILE"
+            echo "Multiple instances[$(grep -c "  ${FILE}"$)]: ${FILE_NAME}" "$SHA1_FILE" >> "$ERRORS_FILE"
             echo "  In $SHA1_FILE" >> "$ERRORS_FILE"
             echo "" >> "$ERRORS_FILE"
         else
@@ -369,7 +370,7 @@ if [ $CHECK -eq 1 ] ; then
 elif  [ $UPDATE -eq 1 ] ; then
   # add new files and fix renamed ones
   bugout "Updating"
-  cat "$FILE_LIST" | while read FILE ; do
+  grep -v -E '(/\.git/|/Thumbs\.db$)' "$FILE_LIST" | while read FILE ; do
     if [ -d "$FILE" ] && [ $RECURSIVE -eq 1 ] ; then
       echo "Entering -- $FILE"
     elif [ -f "$FILE" ] && [ "$(basename "$FILE")" != "${SHA1SUM_SAVE_FILE}" ] ; then
@@ -392,7 +393,7 @@ elif  [ $UPDATE -eq 1 ] ; then
             echo "$FILE_SUM  ${FILE_NAME}" >> "${SHA1_FILE}"
             echo "${FILE}" >> "$ADDED_FILES"
             echo "  Hash: ${FILE_SUM}" >> "$ADDED_FILES"
-          elif [ $(cat "$SHA1_FILE" | grep -c "  ${FILE_NAME_GREP}"$) -eq 0 ] ; then
+          elif [ $(grep -c "  ${FILE_NAME_GREP}"$ "$SHA1_FILE") -eq 0 ] ; then
             # file may have been moved
             # we do $file since it has the full path
             echo "Generating sum for \"${FILE_NAME}\""
@@ -401,7 +402,7 @@ elif  [ $UPDATE -eq 1 ] ; then
             FILE_SUM=$RETURN
             #echo $FILE_SUM
             # check for sum in file
-            if [ $(cat "$SHA1_FILE" | grep -c ^"$FILE_SUM") -gt 0 ] ; then
+            if [ $(grep -c ^"$FILE_SUM" "$SHA1_FILE") -gt 0 ] ; then
               
               # see if one of the files is missing. if it is, then file was renamed
               
@@ -414,7 +415,7 @@ elif  [ $UPDATE -eq 1 ] ; then
                 if ! [ -f "${DIR}/${FILE_NAME_READ}" ] ; then
                   #echo "NOT FOUND ${DIR}/${FILE_NAME_READ}"
                   if [ $FOUND_NEW_FILE -eq 0 ] ; then
-                    cat "$SHA1_FILE" | grep -v "$FILE_NAME_READ_GREP"$ > "$FILES_EXIST"
+                    grep -v "$FILE_NAME_READ_GREP"$ "$SHA1_FILE" > "$FILES_EXIST"
                     cp -f "$FILES_EXIST" "${SHA1_FILE}"
                     echo "$FILE_SUM  ${FILE_NAME}" >> "${SHA1_FILE}"
                     echo "<$FILE_NAME_READ> changed to <${FILE_NAME}> in .../$DIR_SHORT" >> "$CHANGED_NAME"
@@ -424,15 +425,15 @@ elif  [ $UPDATE -eq 1 ] ; then
               done
               
               #check if we found a file. if not, then it is a new file
-              if [ $(cat "$SHA1_FILE" | grep -c "  ${FILE_NAME_GREP}"$) -eq 0 ] ; then
+              if [ $(grep -c "  ${FILE_NAME_GREP}"$ "$SHA1_FILE") -eq 0 ] ; then
                 #file was not added, so add it
                 echo "$FILE_SUM  ${FILE_NAME}" >> "${SHA1_FILE}"
                 echo "${FILE}" >> "$ADDED_FILES"
                 echo "  Hash: ${FILE_SUM}" >> "$ADDED_FILES"
               fi
-            #elif [ $(cat "$SHA1_FILE" | grep -c ^"$FILE_SUM") -eq 1 ] ; then
+            #elif [ $(grep -c ^"$FILE_SUM" "$SHA1_FILE") -eq 1 ] ; then
             #  # just one entry, so check if it is the same file
-            #  if ! [ "$(cat "$SHA1_FILE" | grep -c ^"$FILE_SUM" | cut -f3- -d' ')" == "$FILE_NAME" ] ; then
+            #  if ! [ "$(grep -c ^"$FILE_SUM" "$SHA1_FILE" | cut -f3- -d' ')" == "$FILE_NAME" ] ; then
             #    echo "$FILE_SUM  ${FILE_NAME}" >> "${SHA1_FILE}"
             #    echo "${FILE}" >> "$ADDED_FILES"
             #    echo "  Hash: ${FILE_SUM}" >> "$ADDED_FILES"
@@ -443,9 +444,9 @@ elif  [ $UPDATE -eq 1 ] ; then
               echo "${FILE}" >> "$ADDED_FILES"
               echo "  Hash: ${FILE_SUM}" >> "$ADDED_FILES"
             fi
-          elif [ $(cat "$SHA1_FILE" | grep -c "  ${FILE_NAME_GREP}"$) -gt 1 ] ; then
+          elif [ $(grep -c "  ${FILE_NAME_GREP}"$ "$SHA1_FILE") -gt 1 ] ; then
             # if file is listed more than once, will need to look at it
-            echo "Multiple instances[$(cat "$SHA1_FILE" | grep -c "  ${FILE_NAME}"$)]: ${FILE_NAME}" >> "$ERRORS_FILE"
+            echo "Multiple instances[$(grep -c "  ${FILE_NAME}"$)]: ${FILE_NAME}" "$SHA1_FILE" >> "$ERRORS_FILE"
             echo "  In $SHA1_FILE" >> "$ERRORS_FILE"
             echo "" >> "$ERRORS_FILE"
           fi
@@ -464,7 +465,7 @@ elif  [ $UPDATE -eq 1 ] ; then
    echo ""
    echo "Cleaning up. This may take some time."
    #bugout "Cleaning"
-   cat "$FILE_LIST" | grep "$SHA1SUM_SAVE_FILE"$ | while read SHA1_FILE ; do
+   grep "$SHA1SUM_SAVE_FILE"$ "$FILE_LIST" | while read SHA1_FILE ; do
     if [ -f "$SHA1_FILE" ] ; then
       rm -f "$FILES_EXIST"
       # parse FolderContents.sha1 file and remove non existant entries
