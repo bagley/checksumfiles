@@ -177,7 +177,7 @@ get_upper_case() {
 clean_up() {
     trap "" SIGHUP SIGTERM SIGINT
     output_data
-    rm -drf $TMP_FOLDER
+    rm -rf $TMP_FOLDER
     exit
 }
 
@@ -220,6 +220,8 @@ ERRORS_FILE="${TMP_FOLDER}/errors-$RANDOM"
 #file list
 FILE_LIST="${TMP_FOLDER}/file_list-$RANDOM"
 
+# new FolderContents.sha1
+SHA1_FILE_NEW="${TMP_FOLDER}/FolderContents-$RANDOM"
 
 #############################################
 
@@ -465,7 +467,6 @@ elif  [ $UPDATE -eq 1 ] ; then
     if [ -f "$SHA1_FILE" ] ; then
       rm -f "$FILES_EXIST"
       # parse FolderContents.sha1 file and remove non existant entries
-      echo "Cleaning sum file in $(dirname "$SHA1_FILE")"
       cat "$SHA1_FILE" | while read LINE ; do
         DIR="$(dirname "${SHA1_FILE}")"
         FILE_NAME="$(echo "$LINE" | cut -f3- -d' ')"
@@ -481,8 +482,15 @@ elif  [ $UPDATE -eq 1 ] ; then
       done
       if [ -f "$FILES_EXIST" ] ; then
         # sort files in alphabetical order
-        sort -f --output="$SHA1_FILE" --key=2 "$FILES_EXIST"
+	rm -f "$SHA1_FILE_NEW"
+	sort -f --output="$SHA1_FILE_NEW" --key=2 "$FILES_EXIST"
         rm -f "$FILES_EXIST"
+	# only update new if there are new or changed entries
+	if [ -n "$(diff "$SHA1_FILE" "$SHA1_FILE_NEW")" ] ; then
+	  echo "Cleaning sum file in $(dirname "$SHA1_FILE")"
+      	  cat "$SHA1_FILE_NEW" > "$SHA1_FILE"
+	fi
+	rm -f "$SHA1_FILE_NEW"
       fi     
     fi
   done
