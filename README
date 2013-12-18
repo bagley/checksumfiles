@@ -1,0 +1,4 @@
+Creates hash files to check for data changes/corruption.
+
+Checksums files (sha1) in folder(s), 
+and saves the hashes to .FolderContents.sha1

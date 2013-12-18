@@ -1,6 +1,9 @@
 #!/bin/bash
 #Checksums files (sha1) in a folder, and saves the hashes to .FolderContents.sha1
 
+# Copyright Matt Bagley
+# under the GPL 3
+
 LAST_EDIT="Feb 22, 2007"
 # minor updates 2013
 VERSION=0.1
